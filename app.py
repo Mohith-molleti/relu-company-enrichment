@@ -311,6 +311,8 @@ if "results" not in st.session_state:
 st.title(
     "AI Company Enrichment Dashboard"
 )
+if st.button("Clear Results"):
+    st.session_state.results = []
 
 st.metric(
     "Total Enrichments",
