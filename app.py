@@ -7,6 +7,7 @@ import re
 import json
 from urllib.parse import urljoin
 from google import genai
+import time
 
 # =========================
 # Gemini Configuration
@@ -338,14 +339,16 @@ if st.button("Enrich"):
                 ]
 
                 for url in urls:
-
-                    result = enrich_company(url)
-
-                    st.session_state.results.append(
-                        result
-                    )
-
-                    st.json(result)
+                    st.write("Processing:", url)
+                    try:
+                        result = enrich_company(url)
+                        st.session_state.results.append(result)
+                        st.json(result)
+                        time.sleep(3)
+                    except Exception as e:
+                        st.error(
+                            f"{url} failed: {e}"
+                        )
 
                 with open(
                     "results.json",
