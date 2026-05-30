@@ -1,23 +1,22 @@
 import streamlit as st
 import pandas as pd
 import requests
+import os
 from bs4 import BeautifulSoup
 import re
 import json
 from urllib.parse import urljoin
 from google import genai
 
-# Gemini Configuration
+# Gemini Configuration.
 
 API_KEY = st.secrets["GEMINI_API_KEY"]
-
 client = genai.Client(api_key=API_KEY)
 
-# Page Text Extraction
+# Extract Visible Text.
+
 def get_page_text(url):
-
     try:
-
         headers = {
             "User-Agent": "Mozilla/5.0"
         }
@@ -48,10 +47,10 @@ def get_page_text(url):
         return text[:15000]
 
     except Exception:
-
         return ""
 
-# Relevant Page Discovery
+
+# Discover Relevant Links.
 
 def discover_relevant_links(base_url):
 
@@ -76,7 +75,10 @@ def discover_relevant_links(base_url):
             "services",
             "solution",
             "solutions",
-            "company"
+            "company",
+            "team",
+            "who-we-are",
+            "our-story"
         ]
 
         for a in soup.find_all(
@@ -98,10 +100,10 @@ def discover_relevant_links(base_url):
         return list(set(links))[:5]
 
     except Exception:
-
         return []
 
-# Email Extraction
+
+# Email Extraction.
 
 def extract_emails(text):
 
@@ -112,7 +114,8 @@ def extract_emails(text):
 
     return list(set(emails))
 
-# Phone Extraction
+
+# Phone Extraction.
 
 def extract_phone(text):
 
@@ -123,7 +126,8 @@ def extract_phone(text):
 
     return list(set(phones))
 
-# AI Business Analysis
+
+# AI Analysis.
 
 def analyze_company_with_ai(text):
 
@@ -173,7 +177,9 @@ Company Information:
 
     return cleaned.strip()
 
-# Main Enrichment Function
+
+# Main Enrichment Function.
+
 def enrich_company(url):
 
     homepage_text = get_page_text(url)
@@ -183,22 +189,13 @@ def enrich_company(url):
     extra_text = ""
 
     for link in links:
+        extra_text += "\n" + get_page_text(link)
 
-        extra_text += (
-            "\n" + get_page_text(link)
-        )
+    combined_text = homepage_text + "\n" + extra_text
 
-    combined_text = (
-        homepage_text + "\n" + extra_text
-    )
+    emails = extract_emails(combined_text)
 
-    emails = extract_emails(
-        combined_text
-    )
-
-    phones = extract_phone(
-        combined_text
-    )
+    phones = extract_phone(combined_text)
 
     if len(combined_text.strip()) < 50:
 
@@ -206,7 +203,7 @@ def enrich_company(url):
             "website_name": "N/A",
             "company_name": "N/A",
             "address": "N/A",
-            "mobile_number": "",
+            "mobile_number": "N/A",
             "mail": emails,
             "core_service": "N/A",
             "target_customer": "N/A",
@@ -220,9 +217,7 @@ def enrich_company(url):
 
     try:
 
-        result = json.loads(
-            ai_output
-        )
+        result = json.loads(ai_output)
 
     except Exception:
 
@@ -230,7 +225,7 @@ def enrich_company(url):
             "website_name": "N/A",
             "company_name": "N/A",
             "address": "N/A",
-            "mobile_number": "",
+            "mobile_number": "N/A",
             "mail": [],
             "core_service": "N/A",
             "target_customer": "N/A",
@@ -238,26 +233,57 @@ def enrich_company(url):
             "outreach_opener": "N/A"
         }
 
-    result["mail"] = emails
+    if emails:
+        result["mail"] = emails
 
     if phones:
-
         result["mobile_number"] = phones[0]
+    else:
+        result["mobile_number"] = "N/A"
 
     return result
 
-# Streamlit UI
+
+# Load Previous Results.
+
+if os.path.exists("results.json"):
+
+    try:
+
+        with open(
+            "results.json",
+            "r",
+            encoding="utf-8"
+        ) as f:
+
+            stored_results = json.load(f)
+
+    except Exception:
+
+        stored_results = []
+
+else:
+
+    stored_results = []
+
+
+# Streamlit UI.
+
 st.set_page_config(
     page_title="AI Company Enrichment Dashboard",
     layout="wide"
 )
 
 if "results" not in st.session_state:
-
-    st.session_state.results = []
+    st.session_state.results = stored_results
 
 st.title(
     "AI Company Enrichment Dashboard"
+)
+
+st.metric(
+    "Companies Processed",
+    len(st.session_state.results)
 )
 
 company_name = st.text_input(
@@ -290,12 +316,24 @@ if st.button("Enrich"):
                 )
 
                 if company_name:
-
                     result["company_name"] = company_name
 
                 st.session_state.results.append(
                     result
                 )
+
+                with open(
+                    "results.json",
+                    "w",
+                    encoding="utf-8"
+                ) as f:
+
+                    json.dump(
+                        st.session_state.results,
+                        f,
+                        indent=2,
+                        ensure_ascii=False
+                    )
 
                 st.success(
                     "Analysis completed"
@@ -315,9 +353,25 @@ if st.button("Show All Results"):
             st.session_state.results
         )
 
+        st.subheader(
+            "Enriched Companies"
+        )
+
         st.dataframe(
             df,
             use_container_width=True
+        )
+
+        json_data = json.dumps(
+            st.session_state.results,
+            indent=2
+        )
+
+        st.download_button(
+            label="Download Results JSON",
+            data=json_data,
+            file_name="results.json",
+            mime="application/json"
         )
 
     else:
