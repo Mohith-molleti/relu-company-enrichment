@@ -8,15 +8,22 @@ import json
 from urllib.parse import urljoin
 from google import genai
 
-# Gemini Configuration.
+# ---------------------------
+# Gemini Configuration
+# ---------------------------
 
 API_KEY = st.secrets["GEMINI_API_KEY"]
+
 client = genai.Client(api_key=API_KEY)
 
-# Extract Visible Text.
+# ---------------------------
+# Extract Website Text
+# ---------------------------
 
 def get_page_text(url):
+
     try:
+
         headers = {
             "User-Agent": "Mozilla/5.0"
         }
@@ -24,7 +31,8 @@ def get_page_text(url):
         response = requests.get(
             url,
             headers=headers,
-            timeout=10
+            timeout=10,
+            allow_redirects=True
         )
 
         soup = BeautifulSoup(
@@ -50,7 +58,9 @@ def get_page_text(url):
         return ""
 
 
-# Discover Relevant Links.
+# ---------------------------
+# Discover Important Pages
+# ---------------------------
 
 def discover_relevant_links(base_url):
 
@@ -60,7 +70,8 @@ def discover_relevant_links(base_url):
 
         response = requests.get(
             base_url,
-            timeout=10
+            timeout=10,
+            allow_redirects=True
         )
 
         soup = BeautifulSoup(
@@ -77,8 +88,9 @@ def discover_relevant_links(base_url):
             "solutions",
             "company",
             "team",
-            "who-we-are",
-            "our-story"
+            "products",
+            "support",
+            "careers"
         ]
 
         for a in soup.find_all(
@@ -103,7 +115,9 @@ def discover_relevant_links(base_url):
         return []
 
 
-# Email Extraction.
+# ---------------------------
+# Extract Emails
+# ---------------------------
 
 def extract_emails(text):
 
@@ -115,7 +129,9 @@ def extract_emails(text):
     return list(set(emails))
 
 
-# Phone Extraction.
+# ---------------------------
+# Extract Phones
+# ---------------------------
 
 def extract_phone(text):
 
@@ -127,7 +143,9 @@ def extract_phone(text):
     return list(set(phones))
 
 
-# AI Analysis.
+# ---------------------------
+# AI Analysis
+# ---------------------------
 
 def analyze_company_with_ai(text):
 
@@ -137,10 +155,9 @@ You are a business analyst.
 Return ONLY valid JSON.
 
 Rules:
-1. Do NOT invent information.
-2. If information is unavailable use "N/A".
-3. Return ONLY JSON.
-4. Never use markdown.
+1. Do NOT invent information
+2. If information is unavailable use "N/A"
+3. Return ONLY JSON
 
 Format:
 
@@ -178,7 +195,9 @@ Company Information:
     return cleaned.strip()
 
 
-# Main Enrichment Function.
+# ---------------------------
+# Company Enrichment
+# ---------------------------
 
 def enrich_company(url):
 
@@ -233,8 +252,7 @@ def enrich_company(url):
             "outreach_opener": "N/A"
         }
 
-    if emails:
-        result["mail"] = emails
+    result["mail"] = emails
 
     if phones:
         result["mobile_number"] = phones[0]
@@ -244,7 +262,9 @@ def enrich_company(url):
     return result
 
 
-# Load Previous Results.
+# ---------------------------
+# Load Previous Results
+# ---------------------------
 
 if os.path.exists("results.json"):
 
@@ -267,7 +287,9 @@ else:
     stored_results = []
 
 
-# Streamlit UI.
+# ---------------------------
+# Streamlit UI
+# ---------------------------
 
 st.set_page_config(
     page_title="AI Company Enrichment Dashboard",
@@ -287,74 +309,99 @@ st.metric(
 )
 
 company_name = st.text_input(
-    "Company Name"
+    "Company Name (Optional)"
 )
 
-company_url = st.text_input(
-    "Company URL",
-    placeholder="https://www.company.com"
+company_url = st.text_area(
+    "Company URLs (One URL Per Line)",
+    placeholder="""https://www.zoho.com
+https://openai.com"""
 )
+
+# ---------------------------
+# Enrich Button
+# ---------------------------
 
 if st.button("Enrich"):
 
-    if not company_url:
+    if not company_url.strip():
 
         st.warning(
-            "Please enter a company URL"
+            "Please enter at least one company URL"
         )
 
     else:
 
+        urls = [
+            url.strip()
+            for url in company_url.split("\n")
+            if url.strip()
+        ]
+
         with st.spinner(
-            "Analyzing company..."
+            "Analyzing companies..."
         ):
 
-            try:
+            for url in urls:
 
-                result = enrich_company(
-                    company_url
-                )
+                try:
 
-                if company_name:
-                    result["company_name"] = company_name
+                    result = enrich_company(url)
 
-                st.session_state.results.append(
-                    result
-                )
+                    if company_name:
+                        result["company_name"] = company_name
 
-                with open(
-                    "results.json",
-                    "w",
-                    encoding="utf-8"
-                ) as f:
-
-                    json.dump(
-                        st.session_state.results,
-                        f,
-                        indent=2,
-                        ensure_ascii=False
+                    st.session_state.results.append(
+                        result
                     )
 
-                st.success(
-                    "Analysis completed"
-                )
+                    st.subheader(
+                        result.get(
+                            "company_name",
+                            "Company"
+                        )
+                    )
 
-                st.json(result)
+                    st.json(result)
 
-            except Exception as e:
+                except Exception as e:
 
-                st.error(str(e))
+                    st.error(
+                        f"Failed for {url}: {e}"
+                    )
+
+        with open(
+            "results.json",
+            "w",
+            encoding="utf-8"
+        ) as f:
+
+            json.dump(
+                st.session_state.results,
+                f,
+                indent=2,
+                ensure_ascii=False
+            )
+
+        st.success(
+            f"Analysis completed for {len(urls)} company(s)"
+        )
+
+
+# ---------------------------
+# Show All Results
+# ---------------------------
 
 if st.button("Show All Results"):
 
     if st.session_state.results:
 
-        df = pd.DataFrame(
-            st.session_state.results
-        )
-
         st.subheader(
             "Enriched Companies"
+        )
+
+        df = pd.DataFrame(
+            st.session_state.results
         )
 
         st.dataframe(
