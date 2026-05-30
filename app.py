@@ -212,6 +212,7 @@ def enrich_company(url):
         extra_text += "\n" + get_page_text(link)
 
     combined_text = homepage_text + "\n" + extra_text
+    st.write("Text Length:", len(combined_text))
 
     emails = extract_emails(combined_text)
 
