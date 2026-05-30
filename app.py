@@ -260,8 +260,8 @@ def enrich_company(url):
             "outreach_opener": "N/A"
         }
 
-    if emails:
-        result["mail"] = emails
+    
+        result["mail"] =", ".join(emails) if emails else "N/A"
 
     if phones:
         result["mobile_number"] = phones[0]
@@ -385,9 +385,9 @@ if st.button("Show All Results"):
 
     if st.session_state.results:
 
-        df = pd.DataFrame(
-            st.session_state.results
-        )
+        df = pd.DataFrame(st.session_state.results)
+        df = df.fillna("N/A")
+        df = df.astype(str)
 
         st.subheader(
             "Enriched Companies"
